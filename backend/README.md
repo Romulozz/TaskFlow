@@ -70,4 +70,12 @@ Respuesta de tarea: `{ "id": "UUID", "title": "...", "description": "...", "stat
 
 No hay autenticación, usuarios, cloud ni despliegue productivo. CORS no sustituye autenticación: la API está pensada para uso local y todas las tareas pertenecen al mismo espacio. No exponer públicamente sin añadir controles de acceso. El servidor usa consultas parametrizadas, cabeceras Helmet, límites de cuerpo y cierre ordenado de conexiones.
 
-No se añaden contenedores todavía: corresponden a la siguiente fase del laboratorio. La integración con el cliente frontend se prueba por HTTP a través de Vite. Queda validar el flujo visual y ambos proyectos contra PostgreSQL real.
+## Ejecución con Docker
+
+El backend dispone de un Dockerfile multi-stage. Consulta el [README principal](../README.md#backend-con-docker-y-postgresql-en-el-equipo-local) para construir la imagen, configurar `.env.local`, ejecutar migraciones e iniciar el contenedor conectado a PostgreSQL del equipo.
+
+`npm run db:migrate` utiliza TypeScript para desarrollo. En la imagen final, `npm run db:migrate:prod` ejecuta `dist/migrate.js` y utiliza los archivos de `migrations/`.
+
+La construcción ejecuta `npm run test:backend`, que cubre las pruebas aisladas del backend. `npm test` incluye además la integración con Vite y requiere las dependencias del frontend instaladas.
+
+Pendiente de validación: la versión final con usuario `node`, las migraciones sobre una base vacía desde esa imagen y el CRUD posterior. La Fase 1 todavía no está completa: faltan los contenedores del frontend y PostgreSQL y la integración con Compose.
