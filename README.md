@@ -125,6 +125,6 @@ La prueba de integración importa el cliente HTTP real del frontend y lo ejecuta
 
 `npm run preview` del frontend también incluye el proxy local. Al alojar `frontend/dist` en otro servidor, configura un proxy `/api` hacia el backend o define `VITE_API_URL` (con `/api`) antes de compilar y ajusta `CORS_ORIGIN` en el backend. Las variables `VITE_*` son públicas: no incluyas secretos.
 
-Este MVP no tiene autenticación y se utiliza localmente. La containerización del backend está en progreso. Quedan pendientes el frontend y PostgreSQL en contenedores, la integración con Compose, Kubernetes y el despliegue cloud.
+Este MVP no tiene autenticación y se utiliza localmente. Los Dockerfiles del backend y del frontend están implementados, con validaciones pendientes. El frontend incorpora Nginx; falta configurar su proxy hacia la API y la integración con Compose. Consulta el [estado del frontend Docker](frontend/README.md#imagen-docker-del-frontend-en-progreso). También quedan pendientes PostgreSQL en contenedor, Kubernetes y el despliegue cloud.
 
 Más detalles: [backend](backend/README.md), [frontend](frontend/README.md) y [contrato OpenAPI](backend/openapi.json).
