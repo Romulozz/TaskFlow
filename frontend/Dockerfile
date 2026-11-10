@@ -13,5 +13,6 @@ RUN npm run build
 
 # Desplegar la aplicación
 FROM nginx:alpine3.24-slim AS deploy
-COPY --from=builder /app/dist ./usr/share/nginx/html
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80

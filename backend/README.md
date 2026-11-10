@@ -1,6 +1,6 @@
 # TaskFlow · Backend
 
-API REST local con Node.js, TypeScript, Express y PostgreSQL. El frontend está conectado a esta API mediante el proxy de Vite. Consulta el README principal para iniciar ambos proyectos.
+API REST local con Node.js, TypeScript, Express y PostgreSQL. El frontend está conectado a esta API mediante Nginx en Compose y el proxy de Vite en desarrollo. Consulta el README principal para iniciar ambos proyectos.
 
 ## Preparación
 
@@ -72,10 +72,12 @@ No hay autenticación, usuarios, cloud ni despliegue productivo. CORS no sustitu
 
 ## Ejecución con Docker
 
-El backend dispone de un Dockerfile multi-stage. Consulta el [README principal](../README.md#backend-con-docker-y-postgresql-en-el-equipo-local) para construir la imagen, configurar `.env.local`, ejecutar migraciones e iniciar el contenedor conectado a PostgreSQL del equipo.
+Consulta el [README principal](../README.md#iniciar-con-docker-compose) para configurar las variables e iniciar PostgreSQL, migraciones, backend y frontend.
 
-`npm run db:migrate` utiliza TypeScript para desarrollo. En la imagen final, `npm run db:migrate:prod` ejecuta `dist/migrate.js` y utiliza los archivos de `migrations/`.
+La imagen multi-stage ejecuta la API compilada como usuario `node`. Compose espera a que PostgreSQL esté saludable y a que el servicio `migrate` termine con código 0 antes de iniciar backend. Ambos servicios reutilizan la imagen `taskflow-backend:local` y `backend/.env`.
 
-La construcción ejecuta `npm run test:backend`, que cubre las pruebas aisladas del backend. `npm test` incluye además la integración con Vite y requiere las dependencias del frontend instaladas.
+`npm run db:migrate` utiliza TypeScript para desarrollo; `npm run db:migrate:prod` ejecuta `dist/migrate.js` y lee `migrations/001_tasks.sql` dentro de la imagen. El contenedor puntual de migración debe terminar; Exited (0) es normal.
 
-Pendiente de validación: la versión final con usuario `node`, las migraciones sobre una base vacía desde esa imagen y el CRUD posterior. La Fase 1 todavía no está completa: faltan los contenedores del frontend y PostgreSQL y la integración con Compose.
+La construcción ejecuta `npm run test:backend`. `npm test` incluye además la integración con Vite y requiere las dependencias del frontend instaladas.
+
+El usuario confirmó arranque, CRUD integrado y persistencia tras down/up sin eliminar el volumen. No se ha registrado una prueba aislada de migración desde una base vacía como evidencia independiente. El siguiente paso previsto es publicar imágenes versionadas en Docker Hub.

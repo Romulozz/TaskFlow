@@ -31,30 +31,20 @@ Vite redirige `/api` al backend en `http://127.0.0.1:3000`. Para cambiarlo, copi
 
 La tipografía de Google Fonts es opcional; se usa una fuente del sistema sin conexión.
 
-## Imagen Docker del frontend (en progreso)
+## Imagen Docker del frontend
 
-El Dockerfile usa tres etapas: `deps` instala dependencias con `npm ci`, `builder` comprueba TypeScript y genera `dist`, y `deploy` sirve los archivos compilados con Nginx. La imagen final no incluye Node.js ni las dependencias de desarrollo.
+El Dockerfile usa `deps` para instalar dependencias, `builder` para compilar y `deploy` para servir `dist` con Nginx. La imagen final no necesita Node.js ni node_modules.
 
-Desde la carpeta `frontend`, los comandos previstos para construir y abrir la interfaz son:
+La configuración `nginx/nginx.conf` sirve los archivos del frontend y reenvía `/api/` a `backend:3000`. Ese nombre se resuelve en la red de Compose; para esta configuración se recomienda iniciar el conjunto siguiendo el [README principal](../README.md#iniciar-con-docker-compose).
+
+Desde la raíz del repositorio, con el backend disponible:
 
 ```sh
-docker build -t taskflow-frontend:latest .
-docker run --rm \
-  --name taskflow-frontend \
-  -p 127.0.0.1:8080:80 \
-  taskflow-frontend:latest
+docker compose up -d --build frontend
 ```
 
-Abre `http://localhost:8080`. El puerto se publica solo en el equipo local. `EXPOSE 80` documenta el puerto interno, pero no lo publica por sí mismo.
+Abre http://localhost:8080. `EXPOSE 80` documenta el puerto interno; Compose publica el 8080 del equipo.
 
-### Estado actual y pendientes
+El usuario confirmó que el CRUD funciona a través de Nginx. Un fallo previo se debió a usar una imagen anterior sin la configuración nueva: reconstruir y recrear el contenedor incorporó el archivo. Reiniciar no actualiza los archivos incluidos con COPY.
 
-El Dockerfile ha sido revisado estáticamente; su construcción y ejecución con la etiqueta de Nginx seleccionada todavía no se han verificado en esta entrega.
-
-**La conexión a la API desde Nginx está pendiente.** El cliente utiliza `/api`, pero el proxy de `vite.config.ts` solo funciona con los servidores de Vite; no se incluye en `dist`. Actualmente la imagen no contiene una configuración personalizada de Nginx que reenvíe esas peticiones. Cargar la interfaz no demuestra que el CRUD funcione en este modo.
-
-El próximo paso es configurar Nginx y Docker Compose para conectar frontend y backend por el nombre del servicio backend y su puerto interno `3000`. Se mantendrá PostgreSQL en el equipo al principio y después se incorporará como tercer servicio con persistencia y migraciones.
-
-`VITE_API_URL`, si se utiliza, se incorpora durante la compilación. Pasarla como variable al iniciar el contenedor Nginx no modifica automáticamente los archivos ya compilados. No incluyas secretos en variables `VITE_*`.
-
-Antes de cerrar esta etapa, comprobar que la interfaz carga, `/api/tasks` devuelve JSON del backend, todas las operaciones CRUD funcionan y las tareas permanecen tras recargar. La ejecución local con Vite sigue disponible mientras se completa esta integración.
+`VITE_API_URL` se incorpora durante la compilación; pasarla al arrancar Nginx no modifica los archivos compilados. El flujo actual utiliza `/api` y el proxy de Nginx; el proxy de Vite se utiliza solo en desarrollo/preview.

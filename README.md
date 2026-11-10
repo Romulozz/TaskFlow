@@ -1,130 +1,143 @@
 # TaskFlow
 
-MVP local: React + TypeScript → API Express → PostgreSQL.
+MVP de gestión de tareas: React + TypeScript → Nginx → API Express → PostgreSQL.
 
-## Iniciar la aplicación
+## Estado del proyecto
 
-Requisitos: Node.js 22.12+ y PostgreSQL activo con una base de datos y usuario propios.
+La aplicación está integrada mediante Docker Compose, con imágenes propias para frontend y backend, migración automática y datos persistidos en un volumen. El usuario confirmó el CRUD desde la interfaz y la conservación de tareas después de `docker compose down` y un nuevo arranque. La configuración externa se revisó sin exponer credenciales.
 
-### 1. Backend
+La Fase 1 tiene el flujo funcional y la persistencia verificados por el usuario. El arranque actual funciona; una prueba aislada desde una base completamente vacía no se ha registrado como evidencia independiente. El siguiente paso del roadmap es publicar imágenes versionadas en Docker Hub (Fase 2).
 
-```sh
-cd backend
-npm install
-cp .env.example .env
+## Arquitectura
+
+```text
+Navegador → localhost:8080 → frontend (Nginx:80)
+                              ├── /       → archivos de dist
+                              └── /api/   → backend:3000 → db:5432
+                                                           └── volumen postgres-db
+
+Arranque de la API: db healthy → migrate termina con código 0 → backend
 ```
 
-Edita `backend/.env` con tu `DATABASE_URL` real. Después, desde `backend`:
+Frontend, backend y base comparten la red predeterminada de Compose. `migrate` usa la imagen del backend y ejecuta una tarea puntual. `Exited (0)` en ese servicio es el resultado correcto.
 
-```sh
-npm run db:migrate
-npm run dev
+## Iniciar con Docker Compose
+
+Requiere Docker y Docker Compose; en macOS, Docker Desktop iniciado. No necesitas instalar Node.js ni PostgreSQL en el equipo para esta modalidad. Ejecuta los comandos desde la raíz del repositorio.
+
+### 1. Configurar las variables locales
+
+Crea un archivo `.env` en la raíz (no sobrescribas uno existente):
+
+```dotenv
+POSTGRES_PWD=REEMPLAZAR_POR_TU_CONTRASENA
+POSTGRES_DB=taskflow
 ```
 
-La API escucha en `http://127.0.0.1:3000`. `/ready` comprueba la base y el esquema.
+Compose utiliza este archivo para sustituir `${POSTGRES_PWD}` y `${POSTGRES_DB}` en el YAML. El usuario de PostgreSQL está definido explícitamente como `postgres` para este laboratorio.
 
-### 2. Frontend, en otra terminal
-
-```sh
-cd frontend
-npm install
-npm run dev
-```
-
-Abre `http://localhost:5173`. Vite envía `/api` a `http://127.0.0.1:3000`. No necesitas un `.env` del frontend con los puertos predeterminados. Para cambiar el destino, copia `frontend/.env.example` a `frontend/.env` y ajusta `API_PROXY_TARGET`.
-
-Todas las operaciones se confirman con la API antes de cambiar el tablero. Durante el guardado se bloquean envíos repetidos. Si una solicitud falla, se conservan los datos visibles y se ofrece recargar desde el servidor; no se reintentan escrituras automáticamente.
-
-Las tareas de la versión inicial permanecen en `localStorage`, pero esta versión no las lee ni las importa. No se borran esos datos. El servidor es ahora la fuente de tareas.
-
-## Backend con Docker y PostgreSQL en el equipo local
-
-Esta etapa utiliza Docker Desktop en macOS: el backend corre en un contenedor y PostgreSQL sigue instalado en el equipo. El frontend continúa ejecutándose con Vite como se describe arriba.
-
-### Construir la imagen
-
-Desde la raíz del repositorio:
-
-```sh
-cd backend
-docker build -t backend:latest .
-```
-
-El Dockerfile separa dependencias de desarrollo, pruebas/compilación, dependencias de ejecución y runner. Durante la construcción ejecuta `test:backend`; no ejecuta la prueba de integración con Vite. La etapa final contiene JavaScript compilado, dependencias de ejecución, migraciones y `package.json`, y utiliza el usuario `node`.
-
-### Preparar las variables del contenedor
-
-Desde `backend`, crea `.env.local` si todavía no existe:
-
-```sh
-cp -n .env.example .env.local
-```
-
-Edita ese archivo con estos campos, sustituyendo `TU_CONTRASENA` por tu contraseña local:
+Crea o ajusta `backend/.env`:
 
 ```dotenv
 HOST=0.0.0.0
 PORT=3000
-DATABASE_URL=postgresql://taskflow:TU_CONTRASENA@host.docker.internal:5432/taskflow
-CORS_ORIGIN=http://localhost:5173
+DATABASE_URL=postgresql://postgres:REEMPLAZAR_POR_TU_CONTRASENA@db:5432/taskflow
+CORS_ORIGIN=http://localhost:8080
 ```
 
-`.env.local` está excluido de Git y del contexto de Docker. No publiques el archivo ni pegues credenciales reales en el README. Si la contraseña contiene caracteres especiales, codifícalos para una URL.
+Usa la misma contraseña y base en ambos archivos. Codifica los caracteres especiales de la contraseña para incluirlos en `DATABASE_URL`. La raíz `.env` sirve para la interpolación de Compose; `env_file: ./backend/.env` inyecta las variables en backend y migrate. No son intercambiables.
 
-`host.docker.internal` permite alcanzar el equipo anfitrión desde Docker Desktop. PostgreSQL debe estar iniciado y permitir la conexión de la aplicación; no desactives la autenticación para resolver un fallo de conexión. `HOST=0.0.0.0` permite que Express reciba tráfico dentro del contenedor.
+Ambos archivos están ignorados por Git. No subas credenciales ni las incorpores a las imágenes. Las variables `VITE_*` son públicas y se incorporan al compilar; nunca deben contener secretos.
 
-### Preparar una base nueva
+Las variables de inicialización de PostgreSQL crean la base y el usuario cuando el volumen está vacío. Cambiarlas después no cambia automáticamente las credenciales de una base ya inicializada.
 
-La base y el usuario deben existir antes de ejecutar la migración. Para crear la tabla usando la imagen:
+### 2. Validar y levantar
 
 ```sh
-docker run --rm \
-  --env-file .env.local \
-  backend:latest npm run db:migrate:prod
+docker compose config --quiet
+docker compose up --build
 ```
 
-Este contenedor ejecuta `dist/migrate.js` y termina. El arranque normal de la API no ejecuta migraciones automáticamente. Para probar desde cero, utiliza una base separada, por ejemplo `taskflow_migration_test`, y cambia el nombre de base en una copia local del archivo de variables; no borres las tareas de tu base habitual.
+El healthcheck comprueba que PostgreSQL acepta conexiones. Después `migrate` ejecuta `npm run db:migrate:prod` y, si termina correctamente, se inicia el backend. La migración inicial crea `tasks` sin borrar datos existentes; no es todavía un sistema de migraciones versionadas para cambios futuros de esquema.
 
-### Iniciar la API
+Abre **http://localhost:8080**. Para ejecutar en segundo plano, utiliza `docker compose up -d --build`.
+
+### 3. Comprobar y diagnosticar
 
 ```sh
-docker run --rm \
-  --name taskflow-backend \
-  --env-file .env.local \
-  -p 127.0.0.1:3000:3000 \
-  backend:latest
+docker compose ps -a
+docker compose logs --tail=50 db migrate backend frontend
+curl --fail http://localhost:3000/ready
+curl --fail http://localhost:8080/api/tasks
 ```
 
-El comando deja los logs visibles. `Ctrl+C` detiene el proceso y `--rm` elimina ese contenedor al salir; los datos permanecen en PostgreSQL, fuera del contenedor. Detén el backend local si ya está ocupando el puerto 3000. La publicación se limita al equipo local, mientras Express escucha en todas las interfaces del contenedor. No dejes espacios después de las barras `\` de continuación de línea.
+La segunda petición atraviesa Nginx y debe devolver JSON de la API. El CRUD y los cambios de estado, incluido arrastrar tarjetas, se confirman con el servidor antes de actualizar la interfaz.
 
-En otra terminal puedes comprobar la disponibilidad:
+Puertos publicados actualmente:
+
+| Servicio | Equipo | Contenedor | Uso |
+|---|---|---|---|
+| Frontend | 8080 | 80 | Interfaz y proxy de la API |
+| Backend | 3000 | 3000 | Diagnóstico directo |
+| PostgreSQL | 5432 | 5432 | Cliente SQL como TablePlus |
+
+Los mapeos actuales no se restringen a loopback. Este entorno es un laboratorio local sin autenticación; no se presenta como despliegue productivo. Para limitar el acceso al equipo, publica en `127.0.0.1`. Backend y base no necesitan publicar puertos para comunicarse internamente.
+
+En TablePlus utiliza host `127.0.0.1`, puerto `5432`, usuario `postgres`, la base de `.env` y su contraseña local. Desde los contenedores, la base se alcanza mediante `db`, no `localhost`.
+
+## Persistencia y limpieza
 
 ```sh
-curl --fail http://127.0.0.1:3000/ready
+docker compose down
+docker compose up -d
 ```
 
-El frontend usa el mismo destino de API, por lo que no requiere cambios para este modo.
+`down` elimina contenedores y red, pero conserva el volumen `postgres-db`. Se confirmó manualmente que las tareas reaparecen tras este ciclo.
 
-### Estado de validación
+**`docker compose down -v` elimina el volumen y los datos.** No lo uses para reiniciar normalmente ni para solucionar errores. Prueba bases vacías en un entorno aislado. El volumen tiene un nombre explícito, por lo que cambiar solo el nombre del proyecto Compose no basta para aislarlo.
 
-- Se probó una versión anterior de la imagen contra PostgreSQL del equipo local.
-- Pendiente: reconstruir y validar la versión final con `USER node`, comprobar su usuario efectivo, ejecutar la migración en una base vacía y verificar el CRUD.
-- La configuración del Dockerfile ha sido revisada; esas pruebas pendientes no se consideran completadas.
+## Problemas resueltos
 
-## Comprobaciones
+### Backend reiniciándose por tablas faltantes
+
+PostgreSQL creaba la base, pero la tabla de tareas aún no existía. `depends_on` en forma corta no esperaba disponibilidad ni migraciones. Se añadieron un healthcheck, el servicio `migrate` y las condiciones `service_healthy` y `service_completed_successfully`.
+
+### Frontend sin conexión a la API
+
+El proxy de Vite no se incluye en `dist`. Nginx ahora reenvía `/api/` a `http://backend:3000`, conservando el prefijo. Su configuración está en `frontend/nginx/nginx.conf` y se copia a la imagen.
+
+### Contenedor con una imagen anterior
+
+El usuario detectó que el contenedor seguía usando una imagen que no incluía el archivo de Nginx. Reconstruir y recrear el frontend resolvió el problema:
 
 ```sh
+docker compose up -d --build frontend
+```
+
+Reiniciar un contenedor no incorpora cambios en archivos copiados con `COPY`. El usuario confirmó después el funcionamiento de la interfaz y todas las operaciones de tareas.
+
+## Desarrollo y pruebas fuera de contenedores
+
+Requiere Node.js 22.12+ y dependencias de ambas carpetas:
+
+```sh
+npm ci --prefix frontend
+npm ci --prefix backend
 npm run build --prefix frontend
 npm run build --prefix backend
 npm test --prefix backend
 ```
 
-La prueba de integración importa el cliente HTTP real del frontend y lo ejecuta contra Vite, Express y una base PGlite temporal. Requiere las dependencias de ambas carpetas. Cubre crear, listar, editar, cambiar estado, volver a consultar, eliminar, validación y caída de la API. Las otras pruebas cubren persistencia tras reabrir la base. Esto no sustituye una prueba visual en navegador ni la conexión del driver `pg` con PostgreSQL externo.
+Las pruebas usan PGlite temporal; no modifican la base de Compose. Incluyen CRUD, validaciones, persistencia tras reabrir la base y cliente HTTP → Vite → Express. La construcción Docker del backend ejecuta solo `test:backend`, porque su contexto no incluye el frontend.
 
-## Compilación y configuración
+Para desarrollar únicamente el frontend con Vite mientras backend y db siguen en Compose:
 
-`npm run preview` del frontend también incluye el proxy local. Al alojar `frontend/dist` en otro servidor, configura un proxy `/api` hacia el backend o define `VITE_API_URL` (con `/api`) antes de compilar y ajusta `CORS_ORIGIN` en el backend. Las variables `VITE_*` son públicas: no incluyas secretos.
+```sh
+npm run dev --prefix frontend
+```
 
-Este MVP no tiene autenticación y se utiliza localmente. Los Dockerfiles del backend y del frontend están implementados, con validaciones pendientes. El frontend incorpora Nginx; falta configurar su proxy hacia la API y la integración con Compose. Consulta el [estado del frontend Docker](frontend/README.md#imagen-docker-del-frontend-en-progreso). También quedan pendientes PostgreSQL en contenedor, Kubernetes y el despliegue cloud.
+Abre `http://localhost:5173`. Vite reenvía `/api` a `127.0.0.1:3000`. Si ejecutas también el backend fuera de Docker, detén el backend del contenedor para liberar el puerto y utiliza una conexión a `127.0.0.1:5432`, no a `db`. No sobrescribas la configuración destinada a Compose sin conservarla.
+
+Las tareas antiguas de la primera versión en localStorage no se importan automáticamente; PostgreSQL es la fuente de datos actual.
 
 Más detalles: [backend](backend/README.md), [frontend](frontend/README.md) y [contrato OpenAPI](backend/openapi.json).
