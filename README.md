@@ -6,7 +6,9 @@ MVP de gestión de tareas: React + TypeScript → Nginx → API Express → Post
 
 La aplicación está integrada mediante Docker Compose, con imágenes propias para frontend y backend, migración automática y datos persistidos en un volumen. El usuario confirmó el CRUD desde la interfaz y la conservación de tareas después de `docker compose down` y un nuevo arranque. La configuración externa se revisó sin exponer credenciales.
 
-La Fase 1 tiene el flujo funcional y la persistencia verificados por el usuario. El arranque actual funciona; una prueba aislada desde una base completamente vacía no se ha registrado como evidencia independiente. El siguiente paso del roadmap es publicar imágenes versionadas en Docker Hub (Fase 2).
+La Fase 1 tiene el flujo funcional y la persistencia verificados por el usuario. En Fase 2 se publicaron las imágenes de frontend y backend con etiquetas `1.0.0` y `latest`, y el usuario confirmó el funcionamiento del conjunto mediante `compose.hub.yml`, sin construcción local. Plataformas reportadas: `linux/amd64` y `linux/arm64`.
+
+La publicación y la prueba funcional desde Docker Hub están realizadas. No se ha registrado evidencia independiente de una ejecución en un equipo completamente limpio ni de una prueba en cada arquitectura. La prueba aislada desde una base inicialmente vacía tampoco se ha certificado por separado. Se conserva esta distinción antes de declarar verificado todo el criterio de entorno limpio de la Fase 2.
 
 ## Arquitectura
 
@@ -31,10 +33,11 @@ Crea un archivo `.env` en la raíz (no sobrescribas uno existente):
 
 ```dotenv
 POSTGRES_PWD=REEMPLAZAR_POR_TU_CONTRASENA
+POSTGRES_USER=postgres
 POSTGRES_DB=taskflow
 ```
 
-Compose utiliza este archivo para sustituir `${POSTGRES_PWD}` y `${POSTGRES_DB}` en el YAML. El usuario de PostgreSQL está definido explícitamente como `postgres` para este laboratorio.
+Compose utiliza este archivo para sustituir `${POSTGRES_PWD}`, `${POSTGRES_USER}` y `${POSTGRES_DB}` en el YAML. El ejemplo usa `postgres`; si eliges otro usuario, actualiza también `DATABASE_URL`.
 
 Crea o ajusta `backend/.env`:
 
@@ -83,7 +86,40 @@ Puertos publicados actualmente:
 
 Los mapeos actuales no se restringen a loopback. Este entorno es un laboratorio local sin autenticación; no se presenta como despliegue productivo. Para limitar el acceso al equipo, publica en `127.0.0.1`. Backend y base no necesitan publicar puertos para comunicarse internamente.
 
-En TablePlus utiliza host `127.0.0.1`, puerto `5432`, usuario `postgres`, la base de `.env` y su contraseña local. Desde los contenedores, la base se alcanza mediante `db`, no `localhost`.
+En TablePlus utiliza host `127.0.0.1`, puerto `5432`, el usuario de `POSTGRES_USER`, la base de `.env` y su contraseña local. Desde los contenedores, la base se alcanza mediante `db`, no `localhost`.
+
+## Ejecutar las imágenes publicadas en Docker Hub
+
+| Componente | Imagen usada por Compose |
+|---|---|
+| Backend y migraciones | `romulozz/taskflow-backend:1.0.0` |
+| Frontend | `romulozz/taskflow-frontend:1.0.0` |
+| PostgreSQL | `postgres:17-alpine` |
+
+Repositorios: [backend](https://hub.docker.com/r/romulozz/taskflow-backend) y [frontend](https://hub.docker.com/r/romulozz/taskflow-frontend). Se publicaron `1.0.0` y `latest`; el Compose utiliza la versión explícita. No hace falta cambiar el código para asignar la primera versión a una imagen. `latest` es una etiqueta móvil, no una versión adicional.
+
+`compose.hub.yml` no contiene `build`: permite arrancar con las imágenes publicadas, sin utilizar los Dockerfiles ni compilar. Sí necesita el archivo Compose y la configuración local `.env` y `backend/.env` descrita arriba.
+
+Para cambiar del entorno de construcción local al de Docker Hub, desde la raíz:
+
+```sh
+docker compose -f docker-compose.yml down
+docker compose -f compose.hub.yml config --quiet
+docker compose -f compose.hub.yml pull
+docker compose -f compose.hub.yml up -d
+docker compose -f compose.hub.yml ps -a
+```
+
+No ejecutes ambos simultáneamente con los mismos puertos. Abre http://localhost:8080 y comprueba las tareas. Para diagnosticar o detener esta modalidad, indica siempre el archivo:
+
+```sh
+docker compose -f compose.hub.yml logs --tail=50 migrate backend frontend
+docker compose -f compose.hub.yml down
+```
+
+**Diferencia de volúmenes:** el Compose de desarrollo declara el nombre fijo `postgres-db`. El archivo de Docker Hub omite ese nombre y utiliza un volumen con prefijo de proyecto, por ejemplo `taskflow_postgres-db`. Por tanto, puede presentar una base distinta de la anterior; no mueve ni elimina automáticamente sus datos. Solo será una base vacía si ese volumen no existía previamente. `down` sin `-v` conserva los datos de la modalidad utilizada.
+
+El usuario confirmó que la ejecución con este archivo funciona. No se realizó una nueva prueba de arranque durante la actualización documental ni se verificaron los manifests remotos. Los textos preparados para las fichas de Docker Hub están en [docs/dockerhub](docs/dockerhub/README.md).
 
 ## Persistencia y limpieza
 

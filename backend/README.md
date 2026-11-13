@@ -80,4 +80,4 @@ La imagen multi-stage ejecuta la API compilada como usuario `node`. Compose espe
 
 La construcción ejecuta `npm run test:backend`. `npm test` incluye además la integración con Vite y requiere las dependencias del frontend instaladas.
 
-El usuario confirmó arranque, CRUD integrado y persistencia tras down/up sin eliminar el volumen. No se ha registrado una prueba aislada de migración desde una base vacía como evidencia independiente. El siguiente paso previsto es publicar imágenes versionadas en Docker Hub.
+El usuario confirmó arranque, CRUD integrado y persistencia tras down/up sin eliminar el volumen. No se ha registrado una prueba aislada de migración desde una base vacía como evidencia independiente. Las imágenes `1.0.0` y `latest` ya fueron publicadas en Docker Hub y el usuario confirmó su ejecución con `compose.hub.yml`. Consulta el README principal para conocer el alcance de esa validación.
